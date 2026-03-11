@@ -5,6 +5,7 @@ import Link from "next/link"
 import { format, parseISO } from "date-fns"
 import { es } from "date-fns/locale"
 import type { Client, Insight, InsightType, MeetingListItem } from "@/lib/api"
+import { RegenerarButton } from "@/app/clients/RegenerarButton"
 
 interface ClientKnowledgeBaseProps {
   client: Client
@@ -56,14 +57,14 @@ const typeOrder: InsightType[] = [
   "reminder",
 ]
 
-type TabKey = InsightType | "history"
+type TabKey = "summary" | InsightType | "history"
 
 export function ClientKnowledgeBase({
   client,
   insights,
   meetings,
 }: ClientKnowledgeBaseProps) {
-  const [activeTab, setActiveTab] = useState<TabKey>("client_context")
+  const [activeTab, setActiveTab] = useState<TabKey>("summary")
 
   // Build a lookup map: meeting_id → {title, date}
   const meetingMap = Object.fromEntries(
@@ -105,6 +106,7 @@ export function ClientKnowledgeBase({
   )
 
   const tabs: { key: TabKey; label: string; count?: number }[] = [
+    { key: "summary", label: "Resumen Global" },
     ...typeOrder.map((type) => ({
       key: type as TabKey,
       label: insightConfig[type].label,
@@ -165,7 +167,50 @@ export function ClientKnowledgeBase({
 
       {/* Tab content */}
       <div className="p-6">
-        {activeTab === "history" ? (
+        {activeTab === "summary" ? (
+          <div>
+            {client.summary_generating ? (
+              <div className="flex flex-col items-center justify-center py-12 gap-3 text-gray-400">
+                <svg className="w-6 h-6 animate-spin" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                </svg>
+                <p className="text-sm">Generando resumen con IA... esto puede tomar unos segundos.</p>
+              </div>
+            ) : client.global_summary ? (
+              <div>
+                <div className="prose prose-sm max-w-none text-gray-700 leading-relaxed whitespace-pre-wrap text-sm">
+                  {client.global_summary}
+                </div>
+                <div className="mt-5 flex items-center justify-between border-t border-gray-100 pt-4">
+                  <span className="text-xs text-gray-400">
+                    {client.summary_updated_at
+                      ? `Actualizado: ${(() => {
+                          try {
+                            return format(parseISO(client.summary_updated_at), "d MMM yyyy, HH:mm", { locale: es })
+                          } catch {
+                            return client.summary_updated_at
+                          }
+                        })()}`
+                      : ""}
+                  </span>
+                  <RegenerarButton clientId={client.id} />
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-10">
+                <svg className="w-10 h-10 text-gray-200 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                </svg>
+                <p className="text-sm text-gray-500 mb-1 font-medium">Sin resumen generado</p>
+                <p className="text-xs text-gray-400 mb-5">
+                  El resumen se genera automáticamente al procesar una reunión con cliente asignado, o puedes generarlo manualmente.
+                </p>
+                <RegenerarButton clientId={client.id} />
+              </div>
+            )}
+          </div>
+        ) : activeTab === "history" ? (
           <div className="space-y-3">
             {sortedMeetings.length === 0 ? (
               <p className="text-sm text-gray-400 text-center py-8">

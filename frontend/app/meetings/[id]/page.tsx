@@ -10,6 +10,7 @@ import { NavBar } from "@/components/NavBar"
 import { InsightPanel } from "@/components/InsightPanel"
 import { ProcessButton } from "./ProcessButton"
 import { AssignClientButton } from "./AssignClientButton"
+import { DeleteMeetingButton } from "./DeleteMeetingButton"
 
 interface PageProps {
   params: { id: string }
@@ -149,7 +150,7 @@ export default async function MeetingDetailPage({
               </div>
             </div>
 
-            <div className="flex items-center gap-3 shrink-0">
+            <div className="flex items-center gap-3 shrink-0 flex-wrap">
               <span
                 className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium ${
                   meeting.processed
@@ -168,6 +169,8 @@ export default async function MeetingDetailPage({
               {!meeting.processed && (
                 <ProcessButton meetingId={meeting.id} token={token} />
               )}
+
+              <DeleteMeetingButton meetingId={meeting.id} />
             </div>
           </div>
         </div>

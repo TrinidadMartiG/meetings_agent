@@ -21,7 +21,7 @@ router = APIRouter(tags=["tasks"])
 def weekly_digest(
     user_id: str = Depends(get_current_user_id),
     db: Session = Depends(get_db),
-) -> dict[str, list[str]]:
+) -> dict[str, list[dict]]:
     """Generate a prioritised task list from the last 7 days of insights.
 
     Fetches all insights linked to meetings that belong to the current user

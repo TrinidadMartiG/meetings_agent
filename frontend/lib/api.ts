@@ -37,6 +37,8 @@ export const api = {
     }),
   deleteClient: (token: string, id: string) =>
     apiFetch<void>(`/clients/${id}`, token, { method: "DELETE" }),
+  summarizeClient: (token: string, id: string) =>
+    apiFetch<Client>(`/clients/${id}/summarize`, token, { method: "POST" }),
 
   // Meetings
   getMeetings: (token: string, clientId?: string) =>
@@ -99,7 +101,7 @@ export const api = {
   deleteTask: (token: string, id: string) =>
     apiFetch<void>(`/tasks/${id}`, token, { method: "DELETE" }),
   getWeeklyDigest: (token: string) =>
-    apiFetch<string[]>("/tasks/weekly-digest", token),
+    apiFetch<{ tasks: DigestItem[] }>("/tasks/weekly-digest", token).then(r => r.tasks),
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -109,6 +111,9 @@ export interface Client {
   name: string
   user_id: string
   created_at: string
+  global_summary: string | null
+  summary_updated_at: string | null
+  summary_generating: boolean
 }
 
 export interface MeetingListItem {
@@ -162,4 +167,9 @@ export interface CreateTaskData {
   description: string
   client_id?: string
   due_date?: string
+}
+
+export interface DigestItem {
+  task: string
+  responsible: string
 }

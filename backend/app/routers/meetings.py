@@ -10,6 +10,7 @@ from app.dependencies import get_current_user_id
 from app.models.insight import Insight
 from app.models.meeting import Meeting
 from app.models.task import Task
+from app.models.user import User
 from app.schemas.meeting import MeetingCreate, MeetingListItem, MeetingResponse, MeetingUpdate
 from app.services.gemini import process_transcription
 
@@ -37,7 +38,11 @@ def _process_meeting_background(meeting_id: str) -> None:
         if not meeting:
             return
 
-        result = process_transcription(meeting.transcription_text)
+        # Fetch user name so Gemini can identify which action items belong to the KAM
+        user = db.query(User).filter(User.id == meeting.user_id).first()
+        user_name = user.name if user else ""
+
+        result = process_transcription(meeting.transcription_text, user_name=user_name)
 
         # Persist key points
         for content in result.get("key_points", []):
@@ -50,26 +55,35 @@ def _process_meeting_background(meeting_id: str) -> None:
                 )
             )
 
-        # Persist action items as both insights and tasks
+        # Persist ALL action items as insights (full meeting picture),
+        # but only create Tasks for items assigned to the current KAM ("mine": true).
         for item in result.get("action_items", []):
             description = item.get("description", "")
+            is_mine = item.get("mine", True)  # default True for backwards compatibility
+            responsible = item.get("responsible", "")
+
+            # Build insight content that clearly attributes non-own items
+            insight_content = (
+                description if is_mine else f"{description} (responsable: {responsible})"
+            )
             db.add(
                 Insight(
                     meeting_id=meeting.id,
                     type="action_item",
-                    content=description,
+                    content=insight_content,
                     priority=3,
                 )
             )
-            db.add(
-                Task(
-                    user_id=meeting.user_id,
-                    meeting_id=meeting.id,
-                    client_id=meeting.client_id,
-                    description=description,
-                    status="pending",
+            if is_mine:
+                db.add(
+                    Task(
+                        user_id=meeting.user_id,
+                        meeting_id=meeting.id,
+                        client_id=meeting.client_id,
+                        description=description,
+                        status="pending",
+                    )
                 )
-            )
 
         # Persist recommendations
         for content in result.get("recommendations", []):
@@ -107,6 +121,12 @@ def _process_meeting_background(meeting_id: str) -> None:
 
         meeting.processed = True
         db.commit()
+
+        # Auto-generate client summary now that new insights are committed
+        if meeting.client_id:
+            from app.routers.clients import _generate_summary_background
+            _generate_summary_background(str(meeting.client_id))
+
     except Exception:
         db.rollback()
         raise

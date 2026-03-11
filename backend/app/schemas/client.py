@@ -22,5 +22,8 @@ class ClientResponse(ClientBase):
     id: UUID
     user_id: UUID
     created_at: datetime
+    global_summary: str | None = None
+    summary_updated_at: datetime | None = None
+    summary_generating: bool = False
 
     model_config = {"from_attributes": True}
