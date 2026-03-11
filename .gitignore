@@ -2,6 +2,7 @@
 .env
 backend/.env
 frontend/.env.local
+CLAUDE.md
 
 # Python
 __pycache__/

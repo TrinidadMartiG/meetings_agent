@@ -20,6 +20,12 @@ class MeetingCreate(MeetingBase):
     transcription_text: str
 
 
+class MeetingUpdate(BaseModel):
+    """Payload for partial updates to a meeting (e.g. assigning a client)."""
+
+    client_id: UUID | None = None
+
+
 class MeetingResponse(MeetingBase):
     """Full meeting data including transcription, returned by the API."""
 

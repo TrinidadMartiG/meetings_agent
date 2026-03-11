@@ -9,6 +9,8 @@ import { api } from "@/lib/api"
 import { NavBar } from "@/components/NavBar"
 import { ClientKnowledgeBase } from "@/components/ClientKnowledgeBase"
 import { ClientExpandWrapper } from "./ClientExpandWrapper"
+import { CreateClientButton } from "./CreateClientButton"
+import { DeleteClientButton } from "./DeleteClientButton"
 
 export const metadata: Metadata = {
   title: "Clientes",
@@ -75,9 +77,12 @@ export default async function ClientsPage({ searchParams }: PageProps) {
               Base de conocimiento por cliente
             </p>
           </div>
-          <div className="flex items-center gap-2 text-sm text-gray-500">
-            <span className="font-medium text-gray-900">{clients.length}</span>{" "}
-            cliente{clients.length !== 1 ? "s" : ""}
+          <div className="flex items-center gap-3">
+            <span className="text-sm text-gray-500">
+              <span className="font-medium text-gray-900">{clients.length}</span>{" "}
+              cliente{clients.length !== 1 ? "s" : ""}
+            </span>
+            <CreateClientButton />
           </div>
         </div>
 
@@ -150,6 +155,9 @@ export default async function ClientsPage({ searchParams }: PageProps) {
                           {client.name.charAt(0).toUpperCase()}
                         </span>
                       </div>
+
+                      {/* Delete button */}
+                      <DeleteClientButton clientId={client.id} clientName={client.name} />
 
                       {/* Info */}
                       <div className="flex-1 min-w-0 text-left">

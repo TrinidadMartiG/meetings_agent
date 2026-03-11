@@ -3,23 +3,22 @@
 import { useState } from "react"
 import { format, parseISO, isPast } from "date-fns"
 import { es } from "date-fns/locale"
-import type { Task, Client } from "@/lib/api"
+import type { Task, Client, MeetingListItem } from "@/lib/api"
 import { api } from "@/lib/api"
 
 interface TaskBoardProps {
   initialTasks: Task[]
   token: string
   clients: Client[]
+  meetings: MeetingListItem[]
 }
 
 function TaskCard({
   task,
-  clientName,
   onToggle,
   onDelete,
 }: {
   task: Task
-  clientName?: string
   onToggle: () => void
   onDelete: () => void
 }) {
@@ -35,9 +34,7 @@ function TaskCard({
   }
 
   const isOverdue =
-    task.status === "pending" &&
-    task.due_date &&
-    isPast(parseISO(task.due_date))
+    task.status === "pending" && task.due_date && isPast(parseISO(task.due_date))
 
   const formattedDue = task.due_date
     ? (() => {
@@ -67,48 +64,18 @@ function TaskCard({
         {task.description}
       </p>
 
-      <div className="flex items-center gap-3 flex-wrap">
-        {clientName && (
-          <span className="flex items-center gap-1 text-xs text-gray-500">
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"
-              />
-            </svg>
-            {clientName}
-          </span>
-        )}
-        {formattedDue && (
-          <span
-            className={`flex items-center gap-1 text-xs ${
-              isOverdue ? "text-red-600 font-medium" : "text-gray-500"
-            }`}
-          >
-            <svg
-              className="w-3.5 h-3.5"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-              strokeWidth={2}
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
-              />
-            </svg>
-            {isOverdue ? "Vencida: " : ""}{formattedDue}
-          </span>
-        )}
-      </div>
+      {formattedDue && (
+        <span
+          className={`inline-flex items-center gap-1 text-xs ${
+            isOverdue ? "text-red-600 font-medium" : "text-gray-400"
+          }`}
+        >
+          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+          </svg>
+          {isOverdue ? "Vencida: " : "Vence: "}{formattedDue}
+        </span>
+      )}
 
       <div className="flex items-center gap-2 pt-1">
         <button
@@ -205,9 +172,7 @@ function NewTaskForm({ token, clients, onCreated, onCancel }: NewTaskFormProps) 
         >
           <option value="">Sin cliente</option>
           {clients.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
+            <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>
         <input
@@ -238,28 +203,150 @@ function NewTaskForm({ token, clients, onCreated, onCancel }: NewTaskFormProps) 
   )
 }
 
-export function TaskBoard({ initialTasks, token, clients }: TaskBoardProps) {
+// Groups tasks by client → meeting
+function GroupedTaskList({
+  tasks,
+  clients,
+  meetings,
+  onToggle,
+  onDelete,
+}: {
+  tasks: Task[]
+  clients: Client[]
+  meetings: MeetingListItem[]
+  onToggle: (task: Task) => void
+  onDelete: (id: string) => void
+}) {
+  const clientMap = Object.fromEntries(clients.map((c) => [c.id, c.name]))
+  const meetingMap = Object.fromEntries(meetings.map((m) => [m.id, m]))
+
+  // Group: clientId (or "__none__") → meetingId (or "__none__") → tasks
+  const grouped: Record<string, Record<string, Task[]>> = {}
+
+  for (const task of tasks) {
+    const cKey = task.client_id ?? "__none__"
+    const mKey = task.meeting_id ?? "__none__"
+    if (!grouped[cKey]) grouped[cKey] = {}
+    if (!grouped[cKey][mKey]) grouped[cKey][mKey] = []
+    grouped[cKey][mKey].push(task)
+  }
+
+  if (tasks.length === 0) {
+    return (
+      <div className="bg-white rounded-xl border border-dashed border-gray-200 p-8 text-center">
+        <p className="text-sm text-gray-400">No hay tareas en esta sección</p>
+      </div>
+    )
+  }
+
+  // Sort: clients with tasks first, __none__ last
+  const clientKeys = Object.keys(grouped).sort((a, b) => {
+    if (a === "__none__") return 1
+    if (b === "__none__") return -1
+    return (clientMap[a] ?? "").localeCompare(clientMap[b] ?? "")
+  })
+
+  return (
+    <div className="space-y-6">
+      {clientKeys.map((cKey) => {
+        const clientName = cKey === "__none__" ? "Sin cliente" : (clientMap[cKey] ?? "Cliente desconocido")
+        const meetingKeys = Object.keys(grouped[cKey]).sort((a, b) => {
+          if (a === "__none__") return 1
+          if (b === "__none__") return -1
+          const mA = meetingMap[a]?.meeting_date ?? ""
+          const mB = meetingMap[b]?.meeting_date ?? ""
+          return mB.localeCompare(mA) // most recent first
+        })
+
+        return (
+          <div key={cKey}>
+            {/* Client header */}
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-7 h-7 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center shrink-0">
+                <span className="text-white text-xs font-bold">
+                  {clientName.charAt(0).toUpperCase()}
+                </span>
+              </div>
+              <h3 className="font-semibold text-gray-900 text-sm">{clientName}</h3>
+              <span className="text-xs text-gray-400">
+                {Object.values(grouped[cKey]).flat().length} tarea{Object.values(grouped[cKey]).flat().length !== 1 ? "s" : ""}
+              </span>
+            </div>
+
+            {/* Meetings within client */}
+            <div className="pl-4 border-l-2 border-gray-100 space-y-4">
+              {meetingKeys.map((mKey) => {
+                const meeting = mKey !== "__none__" ? meetingMap[mKey] : null
+                const meetingTasks = grouped[cKey][mKey]
+
+                const meetingLabel = meeting
+                  ? (() => {
+                      try {
+                        return format(parseISO(meeting.meeting_date), "d MMM yyyy", { locale: es })
+                      } catch {
+                        return meeting.meeting_date
+                      }
+                    })()
+                  : null
+
+                return (
+                  <div key={mKey}>
+                    {/* Meeting sub-header */}
+                    <div className="flex items-center gap-2 mb-2">
+                      <svg className="w-3.5 h-3.5 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                      </svg>
+                      <span className="text-xs font-medium text-gray-500">
+                        {meeting ? (
+                          <>
+                            <span className="text-gray-700">{meeting.title}</span>
+                            {meetingLabel && <span className="ml-1 text-gray-400">· {meetingLabel}</span>}
+                          </>
+                        ) : (
+                          "Tarea manual"
+                        )}
+                      </span>
+                    </div>
+                    <div className="space-y-2">
+                      {meetingTasks.map((task) => (
+                        <TaskCard
+                          key={task.id}
+                          task={task}
+                          onToggle={() => onToggle(task)}
+                          onDelete={() => onDelete(task.id)}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+export function TaskBoard({ initialTasks, token, clients, meetings }: TaskBoardProps) {
   const [tasks, setTasks] = useState<Task[]>(initialTasks)
   const [showNewForm, setShowNewForm] = useState(false)
   const [digest, setDigest] = useState<string[] | null>(null)
   const [loadingDigest, setLoadingDigest] = useState(false)
   const [digestError, setDigestError] = useState<string | null>(null)
-
-  const clientMap = Object.fromEntries(clients.map((c) => [c.id, c.name]))
+  const [activeTab, setActiveTab] = useState<"pending" | "done">("pending")
 
   const pending = tasks.filter((t) => t.status === "pending")
   const done = tasks.filter((t) => t.status === "done")
 
   const handleToggle = async (task: Task) => {
     const newStatus = task.status === "pending" ? "done" : "pending"
-    // Optimistic update
     setTasks((prev) =>
       prev.map((t) => (t.id === task.id ? { ...t, status: newStatus } : t))
     )
     try {
       await api.updateTask(token, task.id, { status: newStatus })
     } catch {
-      // Revert on failure
       setTasks((prev) =>
         prev.map((t) => (t.id === task.id ? { ...t, status: task.status } : t))
       )
@@ -348,10 +435,7 @@ export function TaskBoard({ initialTasks, token, clients }: TaskBoardProps) {
               </svg>
               Digest semanal generado por IA
             </h3>
-            <button
-              onClick={() => setDigest(null)}
-              className="text-purple-400 hover:text-purple-600"
-            >
+            <button onClick={() => setDigest(null)} className="text-purple-400 hover:text-purple-600">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -367,68 +451,52 @@ export function TaskBoard({ initialTasks, token, clients }: TaskBoardProps) {
               </li>
             ))}
           </ul>
-          {digestError && (
-            <p className="mt-2 text-sm text-red-600">{digestError}</p>
-          )}
+          {digestError && <p className="mt-2 text-sm text-red-600">{digestError}</p>}
         </div>
       )}
 
-      {/* Two-column board */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Pending column */}
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <h3 className="font-semibold text-gray-900">Pendientes</h3>
-            <span className="bg-yellow-100 text-yellow-700 text-xs font-medium px-2 py-0.5 rounded-full">
-              {pending.length}
-            </span>
-          </div>
-          <div className="space-y-3">
-            {pending.length === 0 ? (
-              <div className="bg-white rounded-xl border border-dashed border-gray-200 p-8 text-center">
-                <p className="text-sm text-gray-400">No hay tareas pendientes</p>
-              </div>
-            ) : (
-              pending.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  clientName={task.client_id ? clientMap[task.client_id] : undefined}
-                  onToggle={() => handleToggle(task)}
-                  onDelete={() => handleDelete(task.id)}
-                />
-              ))
-            )}
-          </div>
-        </div>
-
-        {/* Done column */}
-        <div>
-          <div className="flex items-center gap-2 mb-3">
-            <h3 className="font-semibold text-gray-900">Completadas</h3>
-            <span className="bg-green-100 text-green-700 text-xs font-medium px-2 py-0.5 rounded-full">
-              {done.length}
-            </span>
-          </div>
-          <div className="space-y-3">
-            {done.length === 0 ? (
-              <div className="bg-white rounded-xl border border-dashed border-gray-200 p-8 text-center">
-                <p className="text-sm text-gray-400">Aun no hay tareas completadas</p>
-              </div>
-            ) : (
-              done.map((task) => (
-                <TaskCard
-                  key={task.id}
-                  task={task}
-                  clientName={task.client_id ? clientMap[task.client_id] : undefined}
-                  onToggle={() => handleToggle(task)}
-                  onDelete={() => handleDelete(task.id)}
-                />
-              ))
-            )}
-          </div>
-        </div>
+      {/* Tabs: Pending / Done */}
+      <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
+        <button
+          onClick={() => setActiveTab("pending")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === "pending"
+              ? "bg-white text-gray-900 shadow-sm"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          Pendientes
+          <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
+            activeTab === "pending" ? "bg-yellow-100 text-yellow-700" : "bg-gray-200 text-gray-500"
+          }`}>
+            {pending.length}
+          </span>
+        </button>
+        <button
+          onClick={() => setActiveTab("done")}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors ${
+            activeTab === "done"
+              ? "bg-white text-gray-900 shadow-sm"
+              : "text-gray-500 hover:text-gray-700"
+          }`}
+        >
+          Completadas
+          <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
+            activeTab === "done" ? "bg-green-100 text-green-700" : "bg-gray-200 text-gray-500"
+          }`}>
+            {done.length}
+          </span>
+        </button>
       </div>
+
+      {/* Grouped task list */}
+      <GroupedTaskList
+        tasks={activeTab === "pending" ? pending : done}
+        clients={clients}
+        meetings={meetings}
+        onToggle={handleToggle}
+        onDelete={handleDelete}
+      />
     </div>
   )
 }

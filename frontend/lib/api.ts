@@ -1,4 +1,9 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+// Server-side (Next.js container): use internal Docker URL → http://backend:8000
+// Client-side (browser): use public URL → http://localhost:8000
+const API_URL =
+  typeof window === "undefined"
+    ? process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+    : process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 export async function apiFetch<T>(
   path: string,
@@ -30,6 +35,8 @@ export const api = {
       method: "POST",
       body: JSON.stringify({ name }),
     }),
+  deleteClient: (token: string, id: string) =>
+    apiFetch<void>(`/clients/${id}`, token, { method: "DELETE" }),
 
   // Meetings
   getMeetings: (token: string, clientId?: string) =>
@@ -47,6 +54,11 @@ export const api = {
   processMeeting: (token: string, id: string) =>
     apiFetch<{ message: string }>(`/meetings/${id}/process`, token, {
       method: "POST",
+    }),
+  updateMeeting: (token: string, id: string, data: { client_id: string }) =>
+    apiFetch<Meeting>(`/meetings/${id}`, token, {
+      method: "PATCH",
+      body: JSON.stringify(data),
     }),
   deleteMeeting: (token: string, id: string) =>
     apiFetch<void>(`/meetings/${id}`, token, { method: "DELETE" }),

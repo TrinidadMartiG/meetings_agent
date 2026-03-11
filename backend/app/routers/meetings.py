@@ -10,7 +10,7 @@ from app.dependencies import get_current_user_id
 from app.models.insight import Insight
 from app.models.meeting import Meeting
 from app.models.task import Task
-from app.schemas.meeting import MeetingCreate, MeetingListItem, MeetingResponse
+from app.schemas.meeting import MeetingCreate, MeetingListItem, MeetingResponse, MeetingUpdate
 from app.services.gemini import process_transcription
 
 router = APIRouter(tags=["meetings"])
@@ -197,6 +197,50 @@ def get_meeting(
     )
     if not meeting:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+    return meeting
+
+
+@router.patch("/{meeting_id}", response_model=MeetingResponse)
+def update_meeting(
+    meeting_id: UUID,
+    body: MeetingUpdate,
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> Meeting:
+    """Partially update a meeting (e.g. assign or change its client).
+
+    Args:
+        meeting_id: The UUID of the meeting to update.
+        body: Fields to update (currently only ``client_id``).
+        user_id: Injected authenticated user ID.
+        db: Injected database session.
+
+    Returns:
+        The updated ``MeetingResponse``.
+
+    Raises:
+        HTTPException: 404 if not found or not owned by the current user.
+    """
+    meeting = (
+        db.query(Meeting)
+        .filter(Meeting.id == meeting_id, Meeting.user_id == UUID(user_id))
+        .first()
+    )
+    if not meeting:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Meeting not found")
+
+    if body.client_id is not None:
+        meeting.client_id = body.client_id
+        # Propagate to all tasks from this meeting (covers both initial assignment
+        # and re-assignment after tasks were already created without a client)
+        (
+            db.query(Task)
+            .filter(Task.meeting_id == meeting.id)
+            .update({"client_id": body.client_id})
+        )
+
+    db.commit()
+    db.refresh(meeting)
     return meeting
 
 

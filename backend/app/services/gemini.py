@@ -40,7 +40,7 @@ def _get_model() -> genai.GenerativeModel:
         A configured ``GenerativeModel`` instance.
     """
     genai.configure(api_key=settings.gemini_api_key)
-    return genai.GenerativeModel("gemini-pro")
+    return genai.GenerativeModel("gemini-3.1-flash-lite-preview")
 
 
 # ---------------------------------------------------------------------------

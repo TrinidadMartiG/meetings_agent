@@ -16,9 +16,10 @@ export default async function TasksPage() {
 
   const token = session.backendToken ?? ""
 
-  const [tasks, clients] = await Promise.all([
+  const [tasks, clients, meetings] = await Promise.all([
     api.getTasks(token).catch(() => []),
     api.getClients(token).catch(() => []),
+    api.getMeetings(token).catch(() => []),
   ])
 
   return (
@@ -34,7 +35,7 @@ export default async function TasksPage() {
           </p>
         </div>
 
-        <TaskBoard initialTasks={tasks} token={token} clients={clients} />
+        <TaskBoard initialTasks={tasks} token={token} clients={clients} meetings={meetings} />
       </main>
     </div>
   )

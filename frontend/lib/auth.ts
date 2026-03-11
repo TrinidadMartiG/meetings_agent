@@ -12,7 +12,8 @@ export const authOptions: NextAuthOptions = {
     async signIn({ account }) {
       if (account?.id_token) {
         try {
-          const res = await fetch(`${process.env.NEXT_PUBLIC_API_URL}/auth/google`, {
+          const backendUrl = process.env.API_INTERNAL_URL || process.env.NEXT_PUBLIC_API_URL
+          const res = await fetch(`${backendUrl}/auth/google`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ token: account.id_token }),

@@ -65,11 +65,35 @@ export function ClientKnowledgeBase({
 }: ClientKnowledgeBaseProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("client_context")
 
+  // Build a lookup map: meeting_id → {title, date}
+  const meetingMap = Object.fromEntries(
+    meetings.map((m) => [
+      m.id,
+      {
+        title: m.title,
+        date: (() => {
+          try {
+            return format(parseISO(m.meeting_date), "d MMM yyyy", { locale: es })
+          } catch {
+            return m.meeting_date
+          }
+        })(),
+        id: m.id,
+      },
+    ])
+  )
+
   const grouped = typeOrder.reduce<Record<InsightType, Insight[]>>(
     (acc, type) => {
       acc[type] = insights
         .filter((i) => i.type === type)
-        .sort((a, b) => b.priority - a.priority)
+        // Sort by meeting date desc (most recent first), then by priority
+        .sort((a, b) => {
+          const dateA = meetings.find((m) => m.id === a.meeting_id)?.meeting_date ?? ""
+          const dateB = meetings.find((m) => m.id === b.meeting_id)?.meeting_date ?? ""
+          if (dateB !== dateA) return dateB.localeCompare(dateA)
+          return b.priority - a.priority
+        })
       return acc
     },
     {} as Record<InsightType, Insight[]>
@@ -194,6 +218,7 @@ export function ClientKnowledgeBase({
             ) : (
               grouped[activeTab as InsightType].map((insight) => {
                 const config = insightConfig[insight.type]
+                const source = meetingMap[insight.meeting_id]
                 return (
                   <div
                     key={insight.id}
@@ -202,22 +227,32 @@ export function ClientKnowledgeBase({
                     <p className={`text-sm leading-relaxed ${config.color}`}>
                       {insight.content}
                     </p>
-                    {insight.priority >= 8 && (
-                      <span className="mt-1.5 inline-flex items-center gap-1 text-xs font-medium text-orange-600">
-                        <svg
-                          className="w-3 h-3"
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
+
+                    <div className="mt-2.5 flex items-center justify-between flex-wrap gap-2">
+                      {/* Source: meeting title + date */}
+                      {source && (
+                        <Link
+                          href={`/meetings/${source.id}`}
+                          className="inline-flex items-center gap-1.5 text-xs text-gray-400 hover:text-blue-600 transition-colors"
                         >
-                          <path
-                            fillRule="evenodd"
-                            d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                        Alta prioridad
-                      </span>
-                    )}
+                          <svg className="w-3 h-3 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+                          </svg>
+                          <span className="truncate max-w-[200px]">{source.title}</span>
+                          <span className="text-gray-300">·</span>
+                          <span className="shrink-0">{source.date}</span>
+                        </Link>
+                      )}
+
+                      {insight.priority >= 8 && (
+                        <span className="inline-flex items-center gap-1 text-xs font-medium text-orange-600">
+                          <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
+                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                          Alta prioridad
+                        </span>
+                      )}
+                    </div>
                   </div>
                 )
               })
