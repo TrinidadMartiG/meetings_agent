@@ -65,6 +65,7 @@ export function ClientKnowledgeBase({
   meetings,
 }: ClientKnowledgeBaseProps) {
   const [activeTab, setActiveTab] = useState<TabKey>("summary")
+  const [filterMeetingId, setFilterMeetingId] = useState<string | null>(null)
 
   // Build a lookup map: meeting_id → {title, date}
   const meetingMap = Object.fromEntries(
@@ -84,9 +85,19 @@ export function ClientKnowledgeBase({
     ])
   )
 
+  const sortedMeetings = [...meetings].sort(
+    (a, b) =>
+      new Date(b.meeting_date).getTime() - new Date(a.meeting_date).getTime()
+  )
+
+  // Apply meeting filter before grouping
+  const visibleInsights = filterMeetingId
+    ? insights.filter((i) => i.meeting_id === filterMeetingId)
+    : insights
+
   const grouped = typeOrder.reduce<Record<InsightType, Insight[]>>(
     (acc, type) => {
-      acc[type] = insights
+      acc[type] = visibleInsights
         .filter((i) => i.type === type)
         // Sort by meeting date desc (most recent first), then by priority
         .sort((a, b) => {
@@ -98,11 +109,6 @@ export function ClientKnowledgeBase({
       return acc
     },
     {} as Record<InsightType, Insight[]>
-  )
-
-  const sortedMeetings = [...meetings].sort(
-    (a, b) =>
-      new Date(b.meeting_date).getTime() - new Date(a.meeting_date).getTime()
   )
 
   const tabs: { key: TabKey; label: string; count?: number }[] = [
@@ -164,6 +170,48 @@ export function ClientKnowledgeBase({
           ))}
         </div>
       </div>
+
+      {/* Meeting filter chips — only shown on insight type tabs with 2+ meetings */}
+      {meetings.length > 1 && !["summary", "history"].includes(activeTab) && (
+        <div className="px-6 py-2.5 border-b border-gray-100 bg-gray-50/60 flex items-center gap-2 overflow-x-auto scrollbar-thin">
+          <span className="text-xs text-gray-400 shrink-0">Reunión:</span>
+          <button
+            onClick={() => setFilterMeetingId(null)}
+            className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+              filterMeetingId === null
+                ? "bg-gray-800 text-white"
+                : "bg-white border border-gray-200 text-gray-500 hover:border-gray-400 hover:text-gray-700"
+            }`}
+          >
+            Todas
+          </button>
+          {sortedMeetings.map((m) => {
+            const label = (() => {
+              try {
+                return format(parseISO(m.meeting_date), "d MMM", { locale: es })
+              } catch {
+                return m.meeting_date
+              }
+            })()
+            const isActive = filterMeetingId === m.id
+            return (
+              <button
+                key={m.id}
+                onClick={() => setFilterMeetingId(isActive ? null : m.id)}
+                className={`shrink-0 flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${
+                  isActive
+                    ? "bg-blue-600 text-white"
+                    : "bg-white border border-gray-200 text-gray-500 hover:border-blue-300 hover:text-blue-600"
+                }`}
+              >
+                <span className="truncate max-w-[120px]">{m.title}</span>
+                <span className={isActive ? "text-blue-200" : "text-gray-300"}>·</span>
+                <span className="shrink-0">{label}</span>
+              </button>
+            )
+          })}
+        </div>
+      )}
 
       {/* Tab content */}
       <div className="p-6">
