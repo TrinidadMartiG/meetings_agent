@@ -1,5 +1,6 @@
 # Environment files (NEVER commit these)
 .env
+.env.prod
 backend/.env
 frontend/.env.local
 CLAUDE.md
