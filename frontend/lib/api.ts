@@ -77,6 +77,11 @@ export const api = {
       : ""
     return apiFetch<Insight[]>(`/insights${q}`, token)
   },
+  updateInsight: (token: string, id: string, content: string) =>
+    apiFetch<Insight>(`/insights/${id}`, token, {
+      method: "PATCH",
+      body: JSON.stringify({ content }),
+    }),
 
   // Tasks
   getTasks: (token: string, params?: { status?: string; clientId?: string }) => {
@@ -102,6 +107,17 @@ export const api = {
     apiFetch<void>(`/tasks/${id}`, token, { method: "DELETE" }),
   getWeeklyDigest: (token: string) =>
     apiFetch<{ tasks: DigestItem[] }>("/tasks/weekly-digest", token).then(r => r.tasks),
+
+  // Task comments
+  getTaskComments: (token: string, taskId: string) =>
+    apiFetch<TaskComment[]>(`/tasks/${taskId}/comments`, token),
+  createTaskComment: (token: string, taskId: string, content: string) =>
+    apiFetch<TaskComment>(`/tasks/${taskId}/comments`, token, {
+      method: "POST",
+      body: JSON.stringify({ content }),
+    }),
+  deleteTaskComment: (token: string, taskId: string, commentId: string) =>
+    apiFetch<void>(`/tasks/${taskId}/comments/${commentId}`, token, { method: "DELETE" }),
 }
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -154,6 +170,7 @@ export interface Task {
   status: "pending" | "done"
   due_date: string | null
   created_at: string
+  comment_count: number
 }
 
 export interface CreateMeetingData {
@@ -166,10 +183,19 @@ export interface CreateMeetingData {
 export interface CreateTaskData {
   description: string
   client_id?: string
+  meeting_id?: string
   due_date?: string
 }
 
 export interface DigestItem {
   task: string
   responsible: string
+}
+
+export interface TaskComment {
+  id: string
+  task_id: string
+  user_id: string
+  content: string
+  created_at: string
 }

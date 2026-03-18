@@ -20,6 +20,7 @@ export function DeleteMeetingButton({ meetingId }: DeleteMeetingButtonProps) {
     setLoading(true)
     try {
       await api.deleteMeeting(session.backendToken, meetingId)
+      router.refresh()
       router.push("/meetings")
     } catch {
       setLoading(false)

@@ -6,6 +6,8 @@ import { api } from "@/lib/api"
 import { NavBar } from "@/components/NavBar"
 import { TaskBoard } from "@/components/TaskBoard"
 
+export const dynamic = "force-dynamic"
+
 export const metadata: Metadata = {
   title: "Tareas",
 }

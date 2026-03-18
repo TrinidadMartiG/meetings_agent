@@ -1,12 +1,17 @@
 "use client"
 
 import { useState } from "react"
+import { useSession } from "next-auth/react"
+import { useRouter } from "next/navigation"
 import type { Insight, InsightType } from "@/lib/api"
+import { api } from "@/lib/api"
 
 interface InsightPanelProps {
   insights: Insight[]
   onProcessClick?: () => Promise<void>
   isProcessed: boolean
+  meetingId?: string
+  clientId?: string
 }
 
 const insightConfig: Record<
@@ -79,12 +84,63 @@ const typeOrder: InsightType[] = [
 ]
 
 export function InsightPanel({
-  insights,
+  insights: initialInsights,
   onProcessClick,
   isProcessed,
+  meetingId,
+  clientId,
 }: InsightPanelProps) {
+  const { data: session } = useSession()
+  const router = useRouter()
+  const [insights, setInsights] = useState<Insight[]>(initialInsights)
   const [processing, setProcessing] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [draft, setDraft] = useState("")
+  const [saving, setSaving] = useState(false)
+  const [addingTaskId, setAddingTaskId] = useState<string | null>(null)
+  const [addedTaskIds, setAddedTaskIds] = useState<Set<string>>(new Set())
+
+  const handleAddAsTask = async (insight: Insight) => {
+    if (!session?.backendToken) return
+    setAddingTaskId(insight.id)
+    try {
+      await api.createTask(session.backendToken, {
+        description: insight.content,
+        meeting_id: meetingId,
+        client_id: clientId,
+      })
+      setAddedTaskIds((prev) => new Set(prev).add(insight.id))
+      router.refresh()
+    } finally {
+      setAddingTaskId(null)
+    }
+  }
+
+  const startEdit = (insight: Insight) => {
+    setEditingId(insight.id)
+    setDraft(insight.content)
+  }
+
+  const cancelEdit = () => {
+    setEditingId(null)
+    setDraft("")
+  }
+
+  const saveEdit = async (insight: Insight) => {
+    if (!session?.backendToken || !draft.trim()) return
+    setSaving(true)
+    const original = insight.content
+    setInsights((prev) => prev.map((i) => i.id === insight.id ? { ...i, content: draft.trim() } : i))
+    setEditingId(null)
+    try {
+      await api.updateInsight(session.backendToken, insight.id, draft.trim())
+    } catch {
+      setInsights((prev) => prev.map((i) => i.id === insight.id ? { ...i, content: original } : i))
+    } finally {
+      setSaving(false)
+    }
+  }
 
   const grouped = typeOrder.reduce<Record<InsightType, Insight[]>>(
     (acc, type) => {
@@ -222,12 +278,82 @@ export function InsightPanel({
               {items.map((insight) => (
                 <div
                   key={insight.id}
-                  className={`p-3.5 rounded-xl border ${config.borderColor} ${config.bgColor}`}
+                  className={`p-3.5 rounded-xl border ${config.borderColor} ${config.bgColor} group`}
                 >
-                  <p className={`text-sm leading-relaxed ${config.color.replace("700", "800")}`}>
-                    {insight.content}
-                  </p>
-                  {insight.priority >= 8 && (
+                  {editingId === insight.id ? (
+                    <div className="space-y-2">
+                      <textarea
+                        value={draft}
+                        onChange={(e) => setDraft(e.target.value)}
+                        rows={3}
+                        autoFocus
+                        className="w-full text-sm border border-gray-300 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none bg-white text-gray-800"
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => saveEdit(insight)}
+                          disabled={saving || !draft.trim()}
+                          className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-blue-600 text-white text-xs font-medium hover:bg-blue-700 disabled:opacity-50 transition-colors"
+                        >
+                          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                          </svg>
+                          Guardar
+                        </button>
+                        <button
+                          onClick={cancelEdit}
+                          className="px-2.5 py-1 rounded-lg bg-white border border-gray-200 text-gray-500 text-xs hover:bg-gray-50 transition-colors"
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex items-start justify-between gap-2">
+                      <p className={`text-sm leading-relaxed flex-1 ${config.color.replace("700", "800")}`}>
+                        {insight.content}
+                      </p>
+                      <div className="shrink-0 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
+                        {addedTaskIds.has(insight.id) ? (
+                          <span className="flex items-center gap-1 px-2 py-1 rounded-lg bg-green-100 text-green-700 text-xs font-medium">
+                            <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+                            </svg>
+                            Añadida
+                          </span>
+                        ) : (
+                          <button
+                            onClick={() => handleAddAsTask(insight)}
+                            disabled={addingTaskId === insight.id}
+                            className="flex items-center gap-1 px-2 py-1 rounded-lg bg-white/80 border border-gray-200 text-gray-500 hover:text-blue-600 hover:border-blue-300 text-xs font-medium transition-colors disabled:opacity-50"
+                            title="Añadir como tarea"
+                          >
+                            {addingTaskId === insight.id ? (
+                              <svg className="animate-spin w-3 h-3" fill="none" viewBox="0 0 24 24">
+                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                              </svg>
+                            ) : (
+                              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+                              </svg>
+                            )}
+                            Añadir tarea
+                          </button>
+                        )}
+                        <button
+                          onClick={() => startEdit(insight)}
+                          className="p-1 rounded text-gray-400 hover:text-gray-600 hover:bg-white/60 transition-all"
+                          title="Editar insight"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                  {editingId !== insight.id && insight.priority >= 8 && (
                     <span className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-orange-600">
                       <svg className="w-3 h-3" fill="currentColor" viewBox="0 0 20 20">
                         <path

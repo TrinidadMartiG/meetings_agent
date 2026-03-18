@@ -5,6 +5,7 @@ import { format, parseISO, isPast } from "date-fns"
 import { es } from "date-fns/locale"
 import type { Task, Client, MeetingListItem, DigestItem } from "@/lib/api"
 import { api } from "@/lib/api"
+import { TaskCommentSection } from "@/components/TaskCommentSection"
 
 interface TaskBoardProps {
   initialTasks: Task[]
@@ -13,69 +14,112 @@ interface TaskBoardProps {
   meetings: MeetingListItem[]
 }
 
+
 function TaskCard({
   task,
+  token,
   onToggle,
   onDelete,
+  onDueDateChange,
 }: {
   task: Task
+  token: string
   onToggle: () => void
   onDelete: () => void
+  onDueDateChange: (task: Task, date: string) => void
 }) {
   const [toggling, setToggling] = useState(false)
+  const [editingDate, setEditingDate] = useState(false)
+  const [dateValue, setDateValue] = useState(task.due_date ?? "")
 
   const handleToggle = async () => {
     setToggling(true)
-    try {
-      await onToggle()
-    } finally {
-      setToggling(false)
-    }
+    try { await onToggle() }
+    finally { setToggling(false) }
   }
 
-  const isOverdue =
-    task.status === "pending" && task.due_date && isPast(parseISO(task.due_date))
+  const handleSaveDate = async () => {
+    if (dateValue !== task.due_date) await onDueDateChange(task, dateValue)
+    setEditingDate(false)
+  }
+
+  const isOverdue = task.status === "pending" && task.due_date && isPast(parseISO(task.due_date))
 
   const formattedDue = task.due_date
     ? (() => {
-        try {
-          return format(parseISO(task.due_date), "d MMM yyyy", { locale: es })
-        } catch {
-          return task.due_date
-        }
+        try { return format(parseISO(task.due_date), "d MMM yyyy", { locale: es }) }
+        catch { return task.due_date }
       })()
     : null
 
+  const formattedCreated = (() => {
+    try { return format(parseISO(task.created_at), "d MMM yyyy", { locale: es }) }
+    catch { return "" }
+  })()
+
   return (
-    <div
-      className={`bg-white rounded-xl border p-4 space-y-2.5 ${
-        task.status === "done"
-          ? "border-gray-100 opacity-75"
-          : isOverdue
-          ? "border-red-200"
-          : "border-gray-200"
-      }`}
-    >
-      <p
-        className={`text-sm leading-relaxed ${
-          task.status === "done" ? "line-through text-gray-400" : "text-gray-800"
-        }`}
-      >
+    <div className={`bg-white rounded-xl border p-4 space-y-2.5 ${
+      task.status === "done" ? "border-gray-100 opacity-75" : isOverdue ? "border-red-200" : "border-gray-200"
+    }`}>
+      <p className={`text-sm leading-relaxed ${task.status === "done" ? "line-through text-gray-400" : "text-gray-800"}`}>
         {task.description}
       </p>
 
-      {formattedDue && (
-        <span
-          className={`inline-flex items-center gap-1 text-xs ${
-            isOverdue ? "text-red-600 font-medium" : "text-gray-400"
-          }`}
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+      {/* Date row */}
+      <div className="flex items-center gap-3 flex-wrap">
+        <span className="inline-flex items-center gap-1 text-xs text-gray-300">
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
-          {isOverdue ? "Vencida: " : "Vence: "}{formattedDue}
+          {formattedCreated}
         </span>
-      )}
+
+        {editingDate ? (
+          <div className="flex items-center gap-1.5">
+            <input
+              type="date"
+              value={dateValue}
+              onChange={(e) => setDateValue(e.target.value)}
+              autoFocus
+              className="text-xs border border-gray-200 rounded-lg px-2 py-1 focus:outline-none focus:ring-2 focus:ring-blue-400"
+            />
+            <button
+              onClick={handleSaveDate}
+              className="px-2 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              Guardar
+            </button>
+            <button
+              onClick={() => { setEditingDate(false); setDateValue(task.due_date ?? "") }}
+              className="px-2 py-1 text-xs text-gray-500 hover:bg-gray-100 rounded-lg transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        ) : formattedDue ? (
+          <button
+            onClick={() => setEditingDate(true)}
+            className={`inline-flex items-center gap-1 text-xs transition-colors hover:opacity-70 ${
+              isOverdue ? "text-red-600 font-medium" : "text-gray-400"
+            }`}
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            {isOverdue ? "Vencida: " : "Vence: "}{formattedDue}
+          </button>
+        ) : (
+          <button
+            onClick={() => setEditingDate(true)}
+            className="inline-flex items-center gap-1 text-xs text-gray-300 hover:text-blue-500 transition-colors"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+            Añadir fecha límite
+          </button>
+        )}
+      </div>
 
       <div className="flex items-center gap-2 pt-1">
         <button
@@ -118,6 +162,8 @@ function TaskCard({
           </svg>
         </button>
       </div>
+
+      <TaskCommentSection taskId={task.id} token={token} initialCount={task.comment_count} />
     </div>
   )
 }
@@ -206,16 +252,20 @@ function NewTaskForm({ token, clients, onCreated, onCancel }: NewTaskFormProps) 
 // Groups tasks by client → meeting
 function GroupedTaskList({
   tasks,
+  token,
   clients,
   meetings,
   onToggle,
   onDelete,
+  onDueDateChange,
 }: {
   tasks: Task[]
+  token: string
   clients: Client[]
   meetings: MeetingListItem[]
   onToggle: (task: Task) => void
   onDelete: (id: string) => void
+  onDueDateChange: (task: Task, date: string) => void
 }) {
   const clientMap = Object.fromEntries(clients.map((c) => [c.id, c.name]))
   const meetingMap = Object.fromEntries(meetings.map((m) => [m.id, m]))
@@ -312,8 +362,10 @@ function GroupedTaskList({
                         <TaskCard
                           key={task.id}
                           task={task}
+                          token={token}
                           onToggle={() => onToggle(task)}
                           onDelete={() => onDelete(task.id)}
+                          onDueDateChange={onDueDateChange}
                         />
                       ))}
                     </div>
@@ -366,6 +418,15 @@ export function TaskBoard({ initialTasks, token, clients, meetings }: TaskBoardP
   const handleCreated = (task: Task) => {
     setTasks((prev) => [task, ...prev])
     setShowNewForm(false)
+  }
+
+  const handleDueDateChange = async (task: Task, date: string) => {
+    setTasks((prev) => prev.map((t) => t.id === task.id ? { ...t, due_date: date || null } : t))
+    try {
+      await api.updateTask(token, task.id, { due_date: date || undefined })
+    } catch {
+      setTasks((prev) => prev.map((t) => t.id === task.id ? { ...t, due_date: task.due_date } : t))
+    }
   }
 
   const handleDigest = async () => {
@@ -500,10 +561,12 @@ export function TaskBoard({ initialTasks, token, clients, meetings }: TaskBoardP
       {/* Grouped task list */}
       <GroupedTaskList
         tasks={activeTab === "pending" ? pending : done}
+        token={token}
         clients={clients}
         meetings={meetings}
         onToggle={handleToggle}
         onDelete={handleDelete}
+        onDueDateChange={handleDueDateChange}
       />
     </div>
   )

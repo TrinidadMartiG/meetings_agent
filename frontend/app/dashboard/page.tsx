@@ -2,13 +2,16 @@ import { getServerSession } from "next-auth"
 import { redirect } from "next/navigation"
 import { Metadata } from "next"
 import Link from "next/link"
-import { format, parseISO } from "date-fns"
+import { format } from "date-fns"
 import { es } from "date-fns/locale"
 import { authOptions } from "@/lib/auth"
 import { api } from "@/lib/api"
 import { NavBar } from "@/components/NavBar"
 import { MeetingCard } from "@/components/MeetingCard"
-import type { Task } from "@/lib/api"
+import { WeeklyTaskSummary } from "@/components/WeeklyTaskSummary"
+import { TaskNotifications } from "@/components/TaskNotifications"
+
+export const dynamic = "force-dynamic"
 
 export const metadata: Metadata = {
   title: "Inicio",
@@ -38,34 +41,6 @@ function StatCard({
   )
 }
 
-function PendingTaskRow({ task, clientName }: { task: Task; clientName?: string }) {
-  const formattedDue = task.due_date
-    ? (() => {
-        try {
-          return format(parseISO(task.due_date), "d MMM", { locale: es })
-        } catch {
-          return task.due_date
-        }
-      })()
-    : null
-
-  return (
-    <div className="flex items-start gap-3 py-3 border-b border-gray-50 last:border-0">
-      <div className="w-2 h-2 bg-yellow-400 rounded-full mt-1.5 shrink-0" />
-      <div className="flex-1 min-w-0">
-        <p className="text-sm text-gray-800 leading-snug">{task.description}</p>
-        <div className="flex items-center gap-2 mt-0.5">
-          {clientName && (
-            <span className="text-xs text-gray-400">{clientName}</span>
-          )}
-          {formattedDue && (
-            <span className="text-xs text-gray-400">{formattedDue}</span>
-          )}
-        </div>
-      </div>
-    </div>
-  )
-}
 
 export default async function DashboardPage() {
   const session = await getServerSession(authOptions)
@@ -75,7 +50,7 @@ export default async function DashboardPage() {
 
   const [meetings, tasks, clients] = await Promise.all([
     api.getMeetings(token).catch(() => []),
-    api.getTasks(token, { status: "pending" }).catch(() => []),
+    api.getTasks(token).catch(() => []),
     api.getClients(token).catch(() => []),
   ])
 
@@ -86,8 +61,7 @@ export default async function DashboardPage() {
     )
     .slice(0, 5)
 
-  const topTasks = tasks.slice(0, 5)
-
+  const pendingTasks = tasks.filter((t) => t.status === "pending")
   const clientMap = Object.fromEntries(clients.map((c) => [c.id, c.name]))
 
   const firstName = session.user?.name?.split(" ")[0] ?? "KAM"
@@ -98,6 +72,7 @@ export default async function DashboardPage() {
     <div className="min-h-screen bg-gray-50">
       <NavBar />
 
+      <TaskNotifications tasks={tasks} />
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome header */}
         <div className="mb-8">
@@ -131,7 +106,7 @@ export default async function DashboardPage() {
           />
           <StatCard
             label="Tareas pendientes"
-            value={tasks.length}
+            value={pendingTasks.length}
             color="bg-yellow-50"
             icon={
               <svg
@@ -261,64 +236,13 @@ export default async function DashboardPage() {
             )}
           </div>
 
-          {/* Pending tasks — 1/3 width */}
+          {/* Weekly task summary — 1/3 width */}
           <div>
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-gray-900">
-                Tareas pendientes
-              </h2>
-              <Link
-                href="/tasks"
-                className="text-sm text-blue-600 hover:text-blue-700 font-medium"
-              >
-                Ver todas
-              </Link>
-            </div>
-
-            <div className="bg-white rounded-xl border border-gray-200 p-5">
-              {topTasks.length === 0 ? (
-                <div className="text-center py-6">
-                  <svg
-                    className="w-10 h-10 text-gray-300 mx-auto mb-2"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                    strokeWidth={1.5}
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4"
-                    />
-                  </svg>
-                  <p className="text-sm text-gray-400">
-                    Sin tareas pendientes
-                  </p>
-                </div>
-              ) : (
-                <div>
-                  {topTasks.map((task) => (
-                    <PendingTaskRow
-                      key={task.id}
-                      task={task}
-                      clientName={
-                        task.client_id
-                          ? clientMap[task.client_id]
-                          : undefined
-                      }
-                    />
-                  ))}
-                  {tasks.length > 5 && (
-                    <Link
-                      href="/tasks"
-                      className="block mt-3 text-xs text-center text-blue-600 hover:text-blue-700"
-                    >
-                      +{tasks.length - 5} tareas mas
-                    </Link>
-                  )}
-                </div>
-              )}
-            </div>
+            <WeeklyTaskSummary
+              initialTasks={tasks}
+              token={token}
+              clients={clients}
+            />
           </div>
         </div>
       </main>

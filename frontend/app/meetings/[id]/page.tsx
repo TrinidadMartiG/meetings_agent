@@ -207,6 +207,8 @@ export default async function MeetingDetailPage({
                 insights={insights}
                 isProcessed={meeting.processed}
                 onProcessClick={undefined}
+                meetingId={meeting.id}
+                clientId={meeting.client_id ?? undefined}
               />
             </div>
           </div>

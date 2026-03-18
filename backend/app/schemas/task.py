@@ -36,5 +36,6 @@ class TaskResponse(TaskBase):
     meeting_id: UUID | None
     status: str
     created_at: datetime
+    comment_count: int = 0
 
     model_config = {"from_attributes": True}

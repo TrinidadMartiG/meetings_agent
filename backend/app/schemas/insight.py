@@ -5,6 +5,12 @@ from uuid import UUID
 from pydantic import BaseModel
 
 
+class InsightUpdate(BaseModel):
+    """Payload for updating insight content."""
+
+    content: str
+
+
 class InsightResponse(BaseModel):
     """Insight data returned by the API."""
 

@@ -41,3 +41,10 @@ class Task(Base):
     user: Mapped["User"] = relationship("User", back_populates="tasks")  # type: ignore[name-defined]  # noqa: F821
     meeting: Mapped["Meeting | None"] = relationship("Meeting", back_populates="tasks")  # type: ignore[name-defined]  # noqa: F821
     client: Mapped["Client | None"] = relationship("Client", back_populates="tasks")  # type: ignore[name-defined]  # noqa: F821
+    comments: Mapped[list["TaskComment"]] = relationship(  # type: ignore[name-defined]  # noqa: F821
+        "TaskComment", back_populates="task", cascade="all, delete-orphan", order_by="TaskComment.created_at"
+    )
+
+    @property
+    def comment_count(self) -> int:
+        return len(self.comments)

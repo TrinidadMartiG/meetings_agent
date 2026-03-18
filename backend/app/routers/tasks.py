@@ -1,17 +1,19 @@
-"""Tasks router: manual task management and weekly AI digest."""
+"""Tasks router: manual task management, weekly AI digest, and task comments."""
 
 from datetime import datetime, timedelta
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.database import get_db
 from app.dependencies import get_current_user_id
 from app.models.insight import Insight
 from app.models.meeting import Meeting
 from app.models.task import Task
+from app.models.task_comment import TaskComment
 from app.schemas.task import TaskCreate, TaskResponse, TaskUpdate
+from app.schemas.task_comment import TaskCommentCreate, TaskCommentResponse
 from app.services.gemini import generate_weekly_digest
 
 router = APIRouter(tags=["tasks"])
@@ -77,7 +79,7 @@ def list_tasks(
     Returns:
         A list of ``TaskResponse`` objects ordered by creation date descending.
     """
-    query = db.query(Task).filter(Task.user_id == UUID(user_id))
+    query = db.query(Task).options(selectinload(Task.comments)).filter(Task.user_id == UUID(user_id))
 
     if task_status is not None:
         query = query.filter(Task.status == task_status)
@@ -193,4 +195,79 @@ def delete_task(
     if not task:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
     db.delete(task)
+    db.commit()
+
+
+# ---------------------------------------------------------------------------
+# Task comments
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{task_id}/comments", response_model=list[TaskCommentResponse])
+def list_comments(
+    task_id: UUID,
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> list[TaskComment]:
+    """List all comments for a task owned by the current user."""
+    task = (
+        db.query(Task)
+        .filter(Task.id == task_id, Task.user_id == UUID(user_id))
+        .first()
+    )
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    return db.query(TaskComment).filter(TaskComment.task_id == task_id).order_by(TaskComment.created_at).all()
+
+
+@router.post(
+    "/{task_id}/comments",
+    response_model=TaskCommentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_comment(
+    task_id: UUID,
+    body: TaskCommentCreate,
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> TaskComment:
+    """Add a markdown comment to a task owned by the current user."""
+    task = (
+        db.query(Task)
+        .filter(Task.id == task_id, Task.user_id == UUID(user_id))
+        .first()
+    )
+    if not task:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Task not found")
+    comment = TaskComment(
+        task_id=task_id,
+        user_id=UUID(user_id),
+        content=body.content,
+    )
+    db.add(comment)
+    db.commit()
+    db.refresh(comment)
+    return comment
+
+
+@router.delete("/{task_id}/comments/{comment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_comment(
+    task_id: UUID,
+    comment_id: UUID,
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> None:
+    """Delete a comment owned by the current user."""
+    comment = (
+        db.query(TaskComment)
+        .filter(
+            TaskComment.id == comment_id,
+            TaskComment.task_id == task_id,
+            TaskComment.user_id == UUID(user_id),
+        )
+        .first()
+    )
+    if not comment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Comment not found")
+    db.delete(comment)
     db.commit()

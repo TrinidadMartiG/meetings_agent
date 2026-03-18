@@ -9,7 +9,7 @@ from app.database import get_db
 from app.dependencies import get_current_user_id
 from app.models.insight import Insight
 from app.models.meeting import Meeting
-from app.schemas.insight import InsightResponse
+from app.schemas.insight import InsightResponse, InsightUpdate
 
 router = APIRouter(tags=["insights"])
 
@@ -67,3 +67,39 @@ def list_insights(
         query = query.filter(Meeting.client_id == client_id)
 
     return query.order_by(Insight.priority.desc()).all()
+
+
+@router.patch("/{insight_id}", response_model=InsightResponse)
+def update_insight(
+    insight_id: UUID,
+    body: InsightUpdate,
+    user_id: str = Depends(get_current_user_id),
+    db: Session = Depends(get_db),
+) -> Insight:
+    """Update the content of an insight owned by the current user.
+
+    Args:
+        insight_id: UUID of the insight to update.
+        body: Payload with the new ``content`` string.
+        user_id: Injected authenticated user ID.
+        db: Injected database session.
+
+    Returns:
+        The updated ``InsightResponse``.
+
+    Raises:
+        HTTPException: 404 if not found or not owned by the current user.
+    """
+    insight = (
+        db.query(Insight)
+        .join(Meeting, Insight.meeting_id == Meeting.id)
+        .filter(Insight.id == insight_id, Meeting.user_id == UUID(user_id))
+        .first()
+    )
+    if not insight:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Insight not found")
+
+    insight.content = body.content.strip()
+    db.commit()
+    db.refresh(insight)
+    return insight
