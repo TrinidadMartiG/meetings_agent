@@ -13,6 +13,7 @@ export async function apiFetch<T>(
   const isFormData = options.body instanceof FormData
   const res = await fetch(`${API_URL}${path}`, {
     ...options,
+    cache: "no-store",
     headers: {
       ...(isFormData ? {} : { "Content-Type": "application/json" }),
       Authorization: `Bearer ${token}`,
